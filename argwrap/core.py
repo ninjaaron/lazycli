@@ -1,3 +1,7 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 import argparse
 import functools
 import json
@@ -101,11 +105,3 @@ def script(func):
     func.parse_args = parse_args
     
     return func
-
-
-@script
-def afunc(ham, *eggs, foo, bar='', baz:int=None, good_times=True):
-    return ham, eggs, foo, bar, baz, good_times
-
-
-afunc.parse_args()
