@@ -1,7 +1,6 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
-
 import argparse
 import functools
 import json
@@ -27,21 +26,38 @@ def sort_params(params):
     return positionals, flags, options, kwargs
 
 
+def isiterable(param, T):
+    if param.kind == param.VAR_POSITIONAL:
+        return True
+    try:
+        return issubclass(T, t.Iterable) \
+            and not issubclass(T, (str, t.Mapping))
+    except TypeError:
+        return False
+
+
+def ismapping(param, T):
+    try:
+        return issubclass(T, t.Mapping)
+    except TypeError:
+        return False
+
+
 def add_arg(parser, name, param, kwargs):
     T = None if param.annotation is param.empty else param.annotation
-    if param.kind == param.VAR_POSITIONAL or T is list:
+    if isiterable(param, T):
         kwargs['nargs'] = '*'
 
     if T is None:
         pass
-    elif hasattr(T, '_name'):
-        if T._name in {'List', 'Iterable'}:
+
+    elif T is object or ismapping(param, T):
+        kwargs['type'] = json.loads
+
+    elif hasattr(T, '__origin__') and issubclass(T.__origin__, t.Iterable):
             kwargs['nargs'] = '*'
             if not isinstance(T.__args__[0], t.TypeVar):
                 kwargs['type'] = T.__args__[0]
-
-    elif T is object:
-        kwargs['type'] = json.loads
 
     else:
         kwargs['type'] = T
