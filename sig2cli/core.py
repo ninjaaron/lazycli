@@ -49,9 +49,6 @@ def add_arg(parser, name, param, kwargs):
     if isiterable(param, T):
         kwargs['nargs'] = '*'
 
-    if T is None:
-        pass
-
     elif T is object or ismapping(param, T):
         kwargs['type'] = json.loads
 
@@ -91,16 +88,24 @@ def mkoptions(params, parser):
         add_arg(parser, '--' + param.name, param, {'default': param.default})
 
 
-def script(func):
+def script(func=None, shortflags=None, **kwargs):
+    if func is None:
+        return functools.partial(script, shortflags, **kwargs)
+
     sig = inspect.signature(func)
-    positionals, flags, options, kwargs = sort_params(sig.parameters.values())
-    parser = argparse.ArgumentParser(description=func.__doc__)
+    positionals, flags, options, kw = sort_params(sig.parameters.values())
+    parser = argparse.ArgumentParser(
+        description=func.__doc__,
+        **kwargs
+    )
     mkpositional(positionals, parser)
     mkflags(flags, parser)
     mkoptions(options, parser)
 
-    @functools.wraps(parser.parse_args)
-    def parse_args(*args, **kwargs):
+    def run(*args, **kwargs):
+        """run as cli script. *args and **kwargs are pased to
+        ArgumentParser.parse_args
+        """
         args = parser.parse_args(*args, **kwargs)
         args = vars(args)
         pargs = []
@@ -123,6 +128,6 @@ def script(func):
             print(out)
 
 
-    func.parse_args = parse_args
+    func.run = run
     
     return func
