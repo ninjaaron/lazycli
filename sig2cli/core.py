@@ -33,14 +33,15 @@ def isiterable(param, T):
         return issubclass(T, t.Iterable) \
             and not issubclass(T, (str, t.Mapping))
     except TypeError:
-        return False
+        return isinstance(param.default, t.Iterable) \
+            and not isinstance(param.default, (str, t.Mapping))
 
 
 def ismapping(param, T):
     try:
         return issubclass(T, t.Mapping)
     except TypeError:
-        return False
+        return isinstance(param.default, t.Mapping)
 
 
 def add_arg(parser, name, param, kwargs):
@@ -60,7 +61,11 @@ def add_arg(parser, name, param, kwargs):
                 kwargs['type'] = T.__args__[0]
 
     else:
-        kwargs['type'] = T
+        kwargs['type'] = T or \
+            (
+                None if param.default is param.empty or param.default is None
+                else type(param.default)
+            )
 
     parser.add_argument(name.replace('_', '-'), **kwargs)
 
