@@ -200,6 +200,9 @@ is the interface generated:
     -o OUTFILE, --outfile OUTFILE
                           default: <stdout>
 
+.. _typing: https://docs.python.org/3/library/typing.html
+.. _mypy: http://mypy-lang.org/
+
 Output
 ------
 So far, output has simply been printed. However, If the function has a
