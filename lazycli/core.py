@@ -5,25 +5,37 @@ import argparse
 import functools
 import json
 import inspect
+import string
 import typing as t
+alpha = set(string.ascii_letters)
+
+
+def getshortflag(char, shortflags):
+    if char in shortflags:
+        char = char.upper()
+        if char in shortflags:
+            return None
+
+    shortflags.add(char)
+    return char
 
 
 def sort_params(params):
     positionals = []
     flags = []
     options = []
-    kwargs = False
+    shortflags = set()
     for param in params:
-        if param.kind == param.VAR_KEYWORD:
-            kwargs = True
-        elif param.annotation is bool or isinstance(param.default, bool):
-            flags.append(param)
+        if param.kind is param.VAR_KEYWORD:
+            pass
+        if param.annotation is bool or isinstance(param.default, bool):
+            flags.append((param, getshortflag(param.name[0], shortflags)))
         elif param.default == param.empty:
             positionals.append(param)
         else:
-            options.append(param)
+            options.append((param, getshortflag(param.name[0], shortflags)))
 
-    return positionals, flags, options, kwargs
+    return positionals, flags, options
 
 
 def isiterable(param, T):
@@ -44,27 +56,42 @@ def ismapping(param, T):
         return isinstance(param.default, t.Mapping)
 
 
-def add_arg(parser, name, param, kwargs):
+def add_arg(parser, name, param, kwargs, shortflag=None):
     T = None if param.annotation is param.empty else param.annotation
     if isiterable(param, T):
         kwargs['nargs'] = '*'
 
     elif T is object or ismapping(param, T):
         kwargs['type'] = json.loads
+        kwargs.setdefault('help', 'json')
 
     elif hasattr(T, '__origin__') and issubclass(T.__origin__, t.Iterable):
             kwargs['nargs'] = '*'
-            if not isinstance(T.__args__[0], t.TypeVar):
-                kwargs['type'] = T.__args__[0]
-
+            innerT = T.__args__[0]
+            if not isinstance(innerT, t.TypeVar):
+                if T is object or ismapping(param, T):
+                    kwargs['type'] = json.loads
+                    kwargs.setdefault('help', 'json')
+                else:
+                    kwargs['type'] = innerT
     else:
-        kwargs['type'] = T or \
-            (
-                None if param.default is param.empty or param.default is None
-                else type(param.default)
-            )
+        if not (param.default is param.empty or param.default is None):
+            kwargs['type'] = T or type(param.default)
 
-    parser.add_argument(name.replace('_', '-'), **kwargs)
+    if 'help' not in kwargs:
+        try:
+            kwargs['help'] = str(kwargs['type'].__name__)
+        except (KeyError, AttributeError):
+            pass
+
+    if param.default is not param.empty:
+        defstr = 'default: %s' % param.default
+        kwargs['help'] += ' ' + defstr
+
+    if shortflag:
+        parser.add_argument('-' + shortflag, name.replace('_', '-'), **kwargs)
+    else:
+        parser.add_argument(name.replace('_', '-'), **kwargs)
 
 
 def mkpositional(params, parser):
@@ -73,39 +100,46 @@ def mkpositional(params, parser):
 
 
 def mkflags(params, parser):
-    for param in params:
+    for param, shortflag in params:
         kwargs = {'action': 'store_true'}
         name = '--'
-        if param.default is True:
+        if param.default and param.default is not param.empty:
             name += 'no-'
             kwargs['action'] = 'store_false'
         name += param.name
-        parser.add_argument(name.replace('_', '-'), **kwargs)
+        if shortflag:
+            parser.add_argument(
+                '-' + shortflag, name.replace('_', '-'), **kwargs)
+        else:
+            parser.add_argument(name.replace('_', '-'), **kwargs)
 
 
 def mkoptions(params, parser):
-    for param in params:
-        add_arg(parser, '--' + param.name, param, {'default': param.default})
+    for param, shortflag in params:
+        add_arg(
+            parser,
+            '--' + param.name,
+            param,
+            {'default': param.default},
+            shortflag
+        )
 
 
-def script(func=None, shortflags=None, **kwargs):
+def script(func=None, **kwargs):
     if func is None:
-        return functools.partial(script, shortflags, **kwargs)
-
-    sig = inspect.signature(func)
-    positionals, flags, options, kw = sort_params(sig.parameters.values())
-    parser = argparse.ArgumentParser(
-        description=func.__doc__,
-        **kwargs
-    )
-    mkpositional(positionals, parser)
-    mkflags(flags, parser)
-    mkoptions(options, parser)
+        return functools.partial(script, **kwargs)
 
     def run(*args, **kwargs):
         """run as cli script. *args and **kwargs are pased to
         ArgumentParser.parse_args
         """
+        sig = inspect.signature(func)
+        positionals, flags, options = sort_params(sig.parameters.values())
+        parser = argparse.ArgumentParser(description=func.__doc__, **kwargs)
+        mkpositional(positionals, parser)
+        mkflags(flags, parser)
+        mkoptions(options, parser)
+
         args = parser.parse_args(*args, **kwargs)
         args = vars(args)
         pargs = []
@@ -119,7 +153,7 @@ def script(func=None, shortflags=None, **kwargs):
             if key.startswith('no_'):
                 args[key[3:]] = args.pop(key)
                 continue
-        
+
         out = func(*pargs, **args)
 
         if isinstance(out, t.Iterable) and not isinstance(out, str):
@@ -127,7 +161,5 @@ def script(func=None, shortflags=None, **kwargs):
         elif out is not None:
             print(out)
 
-
     func.run = run
-    
     return func
