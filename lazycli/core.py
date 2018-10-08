@@ -5,6 +5,7 @@ import argparse
 import functools
 import json
 import inspect
+import io
 import string
 import typing as t
 alpha = set(string.ascii_letters)
@@ -43,10 +44,10 @@ def isiterable(param, T):
         return True
     try:
         return issubclass(T, t.Iterable) \
-            and not issubclass(T, (str, t.Mapping))
+            and not issubclass(T, (str, t.Mapping, io.IOBase))
     except TypeError:
         return isinstance(param.default, t.Iterable) \
-            and not isinstance(param.default, (str, t.Mapping))
+            and not isinstance(param.default, (str, t.Mapping, io.IOBase))
 
 
 def ismapping(param, T):
@@ -60,8 +61,10 @@ def add_arg(parser, name, param, kwargs, shortflag=None):
     T = None if param.annotation is param.empty else param.annotation
     if isiterable(param, T):
         kwargs['nargs'] = '*'
+        if T:
+            kwargs['type'] = T
 
-    elif T is object or ismapping(param, T):
+    if T is object or ismapping(param, T):
         kwargs['type'] = json.loads
         kwargs.setdefault('help', 'json')
 
@@ -71,22 +74,29 @@ def add_arg(parser, name, param, kwargs, shortflag=None):
             if not isinstance(innerT, t.TypeVar):
                 if T is object or ismapping(param, T):
                     kwargs['type'] = json.loads
-                    kwargs.setdefault('help', 'json')
+                    kwargs.setdefault('help', 'type: json')
                 else:
                     kwargs['type'] = innerT
     else:
-        if not (param.default is param.empty or param.default is None):
-            kwargs['type'] = T or type(param.default)
+        if T:
+            kwargs['type'] = T
+        elif not (param.default is param.empty or param.default is None):
+            kwargs['type'] = type(param.default)
 
     if 'help' not in kwargs:
         try:
-            kwargs['help'] = str(kwargs['type'].__name__)
+            _type = kwargs['type']
+            if isinstance(_type, type):
+                kwargs['help'] = str('type: ' + _type.__name__)
         except (KeyError, AttributeError):
             pass
 
     if param.default is not param.empty:
-        defstr = 'default: %s' % param.default
-        kwargs['help'] += ' ' + defstr
+        defstr = 'default: %s' % getattr(param.default, 'name', param.default)
+        try:
+            kwargs['help'] += '; ' + defstr
+        except KeyError:
+            kwargs['help'] = defstr
 
     if shortflag:
         parser.add_argument('-' + shortflag, name.replace('_', '-'), **kwargs)
@@ -155,8 +165,8 @@ def script(func=None, **kwargs):
                 continue
 
         out = func(*pargs, **args)
-
-        if isinstance(out, t.Iterable) and not isinstance(out, str):
+        if isinstance(out, t.Iterable) and not isinstance(
+                out, (str, t.Mapping)):
             print(*out, sep='\n')
         elif out is not None:
             print(out)
