@@ -16,6 +16,10 @@ not intended to provide the full range functionality. If you need
 flexibility, use ``argparse`` directly or something more powerful like
 click_.
 
+.. _had the same idea: https://github.com/PaoloSarti/sig2cli
+.. _argparse api: https://docs.python.org/3/library/argparse.html
+.. _click: https://click.palletsprojects.com/
+
 .. contents::
 
 Basics
@@ -78,11 +82,13 @@ important thing in this script are these three lines:
 - All parameters with defaults become optional arguments.
 - ``*args`` arguments will translate into variadic arguments at the
   command line as well. *There can always be zero of them.*
-- Parameters with boolean default values are treated as flags and don't
-  accept additional arguments.
+- Parameters with boolean default values are treated as boolean flags
+  and don't accept arguments.
+- Short versions of flags are generated automatically from the first
+  letter of the parameter.
 - A ``.run`` function is tacked on to the ``cp`` function which
-  triggers argument parsing applies the results to ``cp``. ``cp`` itself
-  is unaltered and can be called elsewhere if desired.
+  triggers argument parsing applies the results to ``cp``. The ``cp``
+  function itself is unaltered and can be called elsewhere if desired.
 
 I'm not entirely sure how useful this last point is, since script
 entry-point functions tend not to be very general-purpose, but, eh, who
@@ -92,3 +98,30 @@ Be aware that, presently, ``**kwargs``-style parameters are ignored
 altogether by lazycli. This may change in the future if I decide to
 work on sub-parsers. Honestly, the point of this module is to avoid
 typing, and doing sub-parsers sounds like a lot of typing.
+
+**Note on short flags:**
+  Short flags are generated for optional arguments based on the first
+  letter of parameter names. If that flag has been used by a previous
+  parameter, the flag will be uppercased. If that has already been used,
+  no short flag is generated. Because of this, changing the order of
+  arguments can potentially break the backward compatibility of your
+  CLI.
+
+**Note on boolean defaults:**
+  A boolean default set to ``False`` produces the output seen above. If
+  we change the parameter default to ``recursive=True``, the name of the
+  flag is inverted:
+
+  .. code::
+
+    optional arguments:
+      -h, --help          show this help message and exit
+      -r, --no-recursive
+
+.. _shutil: https://docs.python.org/3/library/shutil.html
+
+Types
+-----
+lazycli attempts to parse the strings it's given into Python types based
+first on type annotations in the function signature and then based on
+the type of the default argument.
