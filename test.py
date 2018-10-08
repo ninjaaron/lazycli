@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-import sig2cli
+import lazycli
 import argparse
 
 
-@sig2cli.script
-def main(arg, n=1, more:tuple=(max,)):
+@lazycli.script
+def main(arg, number=1, more:tuple=(max,)):
     print((arg, n, more))
 
 
