@@ -122,6 +122,86 @@ typing, and doing sub-parsers sounds like a lot of typing.
 
 Types
 -----
-lazycli attempts to parse the strings it's given into Python types based
-first on type annotations in the function signature and then based on
-the type of the default argument.
+lazycli attempts to determin the strings it's given into Python types
+based first on type annotations in the function signature and then based
+on the type of the default argument.
+
+- If the type of parameter is an iterable (besides mappings, strings and
+  files), it will become a variadic when interpreted. If it's a
+  subscripted type from the typing_ module, like
+  ``typing.Iterable[int]``, the subscript will be used as the type.
+- If the type is determined to be a mapping or is annotated as
+  ``object``, the argument should be a json literal (though it could
+  theoretically be a string, number, array or object).
+
+The infered type is then used as a factory function to parse the
+argument string.
+
+.. code:: python
+
+  #!/usr/bin/env python3
+  import lazycli
+
+  @lazycli.script
+  def my_sum(*numbers: float):
+      print(sum(numbers))
+
+  if __name__ == '__main__':
+      my_sum.run()
+
+.. code:: sh
+
+  usage: sum.py [-h] [numbers [numbers ...]]
+
+  positional arguments:
+    numbers     type: float
+
+  optional arguments:
+    -h, --help  show this help message and exit
+
+Though the style is questionable, this means you can use arbitrary
+callables as type annotations:
+
+.. code:: python
+
+  
+  #!/usr/bin/env python3
+  import sys
+  import lazycli
+
+
+  @lazycli.script
+  def upcat(
+          infile: open = sys.stdin,
+          outfile: lambda f: open(f, 'w') = sys.stdout
+  ):
+      """cat, but upper-cases everything."""
+      for line in infile:
+          outfile.write(line.upper())
+
+
+  if __name__ == '__main__':
+      upcat.run()
+
+This looks pretty bad, and mypy_ is going to hate it. A better way to
+do this is probably just parsing the string inside the script. P.S. Here
+is the interface generated:
+
+.. code:: sh
+
+  usage: upcat.py [-h] [-i INFILE] [-o OUTFILE]
+
+  cat, but upper-cases everything.
+
+  optional arguments:
+    -h, --help            show this help message and exit
+    -i INFILE, --infile INFILE
+                          default: <stdin>
+    -o OUTFILE, --outfile OUTFILE
+                          default: <stdout>
+
+Output
+------
+So far, output has simply been printed. However, If the function has a
+return value, that will also be printed. If it is an iterable (besides a
+string or mapping), each item will be printed on a new line.
