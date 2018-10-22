@@ -122,9 +122,9 @@ typing, and doing sub-parsers sounds like a lot of typing.
 
 Types
 -----
-lazycli attempts to determin the strings it's given into Python types
-based first on type annotations in the function signature and then based
-on the type of the default argument.
+lazycli attempts to determine argument types based first on type
+annotations in the function signature and then based on the type of the
+default argument.
 
 - If the type of parameter is an iterable (besides mappings, strings and
   files), it will become a variadic when interpreted. If it's a
