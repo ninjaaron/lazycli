@@ -40,6 +40,8 @@ def sort_params(params):
 
 
 def isiterable(param, T):
+    if T is None:
+        return False
     if param.kind == param.VAR_POSITIONAL:
         return True
     try:
@@ -51,6 +53,8 @@ def isiterable(param, T):
 
 
 def ismapping(param, T):
+    if T is None:
+        return False
     try:
         return issubclass(T, t.Mapping)
     except TypeError:
@@ -69,14 +73,14 @@ def add_arg(parser, name, param, kwargs, shortflag=None):
         kwargs.setdefault('help', 'json')
 
     elif hasattr(T, '__origin__') and issubclass(T.__origin__, t.Iterable):
-            kwargs['nargs'] = '*'
-            innerT = T.__args__[0]
-            if not isinstance(innerT, t.TypeVar):
-                if T is object or ismapping(param, T):
-                    kwargs['type'] = json.loads
-                    kwargs.setdefault('help', 'type: json')
-                else:
-                    kwargs['type'] = innerT
+        kwargs['nargs'] = '*'
+        innerT = T.__args__[0]
+        if not isinstance(innerT, t.TypeVar):
+            if T is object or ismapping(param, T):
+                kwargs['type'] = json.loads
+                kwargs.setdefault('help', 'type: json')
+            else:
+                kwargs['type'] = innerT
     else:
         if T:
             kwargs['type'] = T
