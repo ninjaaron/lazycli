@@ -40,24 +40,20 @@ def sort_params(params):
 
 
 def isiterable(param, T):
-    if T is None:
-        return False
     if param.kind == param.VAR_POSITIONAL:
         return True
     try:
         return issubclass(T, t.Iterable) \
             and not issubclass(T, (str, t.Mapping, io.IOBase))
-    except TypeError:
+    except (TypeError, AttributeError):
         return isinstance(param.default, t.Iterable) \
             and not isinstance(param.default, (str, t.Mapping, io.IOBase))
 
 
 def ismapping(param, T):
-    if T is None:
-        return False
     try:
         return issubclass(T, t.Mapping)
-    except TypeError:
+    except (TypeError, AttributeError):
         return isinstance(param.default, t.Mapping)
 
 
