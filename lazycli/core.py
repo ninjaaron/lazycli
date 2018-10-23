@@ -59,38 +59,37 @@ def ismapping(param, T):
 
 def add_arg(parser, name, param, kwargs, shortflag=None):
     T = None if param.annotation is param.empty else param.annotation
-    if T is not None:
-        if isiterable(param, T):
-            kwargs['nargs'] = '*'
-            if T:
-                kwargs['type'] = T
+    if isiterable(param, T):
+        kwargs['nargs'] = '*'
+        if T:
+            kwargs['type'] = T
 
-        if T is object or ismapping(param, T):
-            kwargs['type'] = json.loads
-            kwargs.setdefault('help', 'json')
+    if T is object or ismapping(param, T):
+        kwargs['type'] = json.loads
+        kwargs.setdefault('help', 'json')
 
-        elif hasattr(T, '__origin__') and issubclass(T.__origin__, t.Iterable):
-            kwargs['nargs'] = '*'
-            innerT = T.__args__[0]
-            if not isinstance(innerT, t.TypeVar):
-                if T is object or ismapping(param, T):
-                    kwargs['type'] = json.loads
-                    kwargs.setdefault('help', 'type: json')
-                else:
-                    kwargs['type'] = innerT
-        else:
-            if T:
-                kwargs['type'] = T
-            elif not (param.default is param.empty or param.default is None):
-                kwargs['type'] = type(param.default)
+    elif hasattr(T, '__origin__') and issubclass(T.__origin__, t.Iterable):
+        kwargs['nargs'] = '*'
+        innerT = T.__args__[0]
+        if not isinstance(innerT, t.TypeVar):
+            if T is object or ismapping(param, T):
+                kwargs['type'] = json.loads
+                kwargs.setdefault('help', 'type: json')
+            else:
+                kwargs['type'] = innerT
+    else:
+        if T:
+            kwargs['type'] = T
+        elif not (param.default is param.empty or param.default is None):
+            kwargs['type'] = type(param.default)
 
-        if 'help' not in kwargs:
-            try:
-                _type = kwargs['type']
-                if isinstance(_type, type):
-                    kwargs['help'] = str('type: ' + _type.__name__)
-            except (KeyError, AttributeError):
-                pass
+    if 'help' not in kwargs:
+        try:
+            _type = kwargs['type']
+            if isinstance(_type, type):
+                kwargs['help'] = str('type: ' + _type.__name__)
+        except (KeyError, AttributeError):
+            pass
 
     if param.default is not param.empty:
         defstr = 'default: %s' % getattr(param.default, 'name', param.default)

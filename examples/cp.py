@@ -7,6 +7,7 @@ import sys
 @lazycli.script
 def cp(*src, dst, recursive=False):
     """copy around files"""
+    print(src)
     for path in src:
         try:
             shutil.copy2(path, dst)
