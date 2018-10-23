@@ -40,6 +40,8 @@ def sort_params(params):
 
 
 def isiterable(param, T):
+    if T is None:
+        return False
     if param.kind == param.VAR_POSITIONAL:
         return True
     try:
@@ -51,6 +53,8 @@ def isiterable(param, T):
 
 
 def ismapping(param, T):
+    if T is None:
+        return False
     try:
         return issubclass(T, t.Mapping)
     except TypeError:
