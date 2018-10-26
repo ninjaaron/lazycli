@@ -42,24 +42,6 @@ def sort_params(params):
 ArgType = collections.namedtuple('ArgType', 'iterable, constructor')
 
 
-def isiterable(param, T):
-    if param.kind == param.VAR_POSITIONAL:
-        return True
-    try:
-        return issubclass(T, t.Iterable) \
-            and not issubclass(T, (str, t.Mapping, io.IOBase))
-    except (TypeError, AttributeError):
-        return isinstance(param.default, t.Iterable) \
-            and not isinstance(param.default, (str, t.Mapping, io.IOBase))
-
-
-def ismapping(param, T):
-    try:
-        return issubclass(T, t.Mapping)
-    except (TypeError, AttributeError):
-        return isinstance(param.default, t.Mapping)
-
-
 def real_type(T):
     if T is object or issubclass(T, t.Mapping):
         return ArgType(False, json.loads)
@@ -74,11 +56,12 @@ def real_type(T):
 
 
 def typing_type(T):
-    iterable, _ = real_type(T)
+    iterable, _ = real_type(T.__origin__)
     if iterable:
         try:
             subscript = T.__args__[0]
-            return ArgType(True, T.__args__[0])
+            _, constructor = real_type(subscript)
+            return ArgType(True, constructor)
         except IndexError:
             return ArgType(True, None)
 
@@ -86,6 +69,8 @@ def typing_type(T):
 
 
 def annotation_type(annotation):
+    if inspect.isfunction(annotation) or inspect.isbuiltin(annotation):
+        return ArgType(False, annotation)
     if isinstance(annotation, type):
         return real_type(annotation)
     return typing_type(annotation)
@@ -99,6 +84,16 @@ def varargs_type(param):
     return ArgType(True, constructor)
 
 
+def default_type(default):
+    iterable, constructor = real_type(type(default))
+    if iterable:
+        try:
+            _, constructor = real_type(type(default[0]))
+        except IndexError:
+            pass
+    return ArgType(iterable, constructor)
+
+
 def infer_type(param, positional=False):
     if param.kind is param.VAR_POSITIONAL:
         return varargs_type(param)
@@ -107,44 +102,19 @@ def infer_type(param, positional=False):
         return annotation_type(param.annotation)
 
     if positional:
-        return None
+        return ArgType(False, None)
 
     return default_type(param.default)
 
 
-def add_arg(parser, name, param, kwargs, shortflag=None):
-    T = None if param.annotation is param.empty else param.annotation
-    if isiterable(param, T):
+def add_arg(parser, name, param, kwargs, shortflag=None, positional=True):
+    iterable, constructor = infer_type(param, positional)
+    if iterable:
         kwargs['nargs'] = '*'
-        if T:
-            kwargs['type'] = T
-
-    if T is object or ismapping(param, T):
-        kwargs['type'] = json.loads
-        kwargs.setdefault('help', 'json')
-
-    elif hasattr(T, '__origin__') and issubclass(T.__origin__, t.Iterable):
-        kwargs['nargs'] = '*'
-        innerT = T.__args__[0]
-        if not isinstance(innerT, t.TypeVar):
-            if T is object or ismapping(param, T):
-                kwargs['type'] = json.loads
-                kwargs.setdefault('help', 'type: json')
-            else:
-                kwargs['type'] = innerT
-    else:
-        if T:
-            kwargs['type'] = T
-        elif not (param.default is param.empty or param.default is None):
-            kwargs['type'] = type(param.default)
-
-    if 'help' not in kwargs:
-        try:
-            _type = kwargs['type']
-            if isinstance(_type, type):
-                kwargs['help'] = str('type: ' + _type.__name__)
-        except (KeyError, AttributeError):
-            pass
+    if constructor:
+        kwargs['type'] = constructor
+        tname = 'json' if constructor == json.loads else constructor.__name__
+        kwargs['help'] = 'type: ' + tname
 
     if param.default is not param.empty:
         defstr = 'default: %s' % getattr(param.default, 'name', param.default)
@@ -161,7 +131,7 @@ def add_arg(parser, name, param, kwargs, shortflag=None):
 
 def mkpositional(params, parser):
     for param in params:
-        add_arg(parser, param.name, param, {})
+        add_arg(parser, param.name, param, {}, positional=True)
 
 
 def mkflags(params, parser):
