@@ -5,7 +5,7 @@ import argparse
 
 @lazycli.script
 def main(*args, arg, number=1, more:tuple=(max,)):
-    print((args, arg, number, more))
+    return repr([args, arg, number, more])
 
 
 if __name__ == '__main__':
