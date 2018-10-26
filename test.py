@@ -4,8 +4,8 @@ import argparse
 
 
 @lazycli.script
-def main(arg, number=1, more:tuple=(max,)):
-    print((arg, n, more))
+def main(*args, arg, number=1, more:tuple=(max,)):
+    print((args, arg, number, more))
 
 
 if __name__ == '__main__':
