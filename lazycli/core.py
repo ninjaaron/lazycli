@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 import argparse
-import functools
+import collections
 import json
 import inspect
 import io
@@ -39,57 +39,82 @@ def sort_params(params):
     return positionals, flags, options
 
 
-def isiterable(param, T):
-    if param.kind == param.VAR_POSITIONAL:
-        return True
-    try:
-        return issubclass(T, t.Iterable) \
-            and not issubclass(T, (str, t.Mapping, io.IOBase))
-    except (TypeError, AttributeError):
-        return isinstance(param.default, t.Iterable) \
-            and not isinstance(param.default, (str, t.Mapping, io.IOBase))
+ArgType = collections.namedtuple('ArgType', 'iterable, constructor')
 
 
-def ismapping(param, T):
-    try:
-        return issubclass(T, t.Mapping)
-    except (TypeError, AttributeError):
-        return isinstance(param.default, t.Mapping)
+def real_type(T):
+    if T is object or issubclass(T, t.Mapping):
+        return ArgType(False, json.loads)
+
+    if issubclass(T, (io.IOBase, str)):
+        return ArgType(False, T)
+
+    if issubclass(T, t.Sequence):
+        return ArgType(True, None)
+
+    return ArgType(False, T)
 
 
-def add_arg(parser, name, param, kwargs, shortflag=None):
-    T = None if param.annotation is param.empty else param.annotation
-    if isiterable(param, T):
-        kwargs['nargs'] = '*'
-        if T:
-            kwargs['type'] = T
-
-    if T is object or ismapping(param, T):
-        kwargs['type'] = json.loads
-        kwargs.setdefault('help', 'json')
-
-    elif hasattr(T, '__origin__') and issubclass(T.__origin__, t.Iterable):
-        kwargs['nargs'] = '*'
-        innerT = T.__args__[0]
-        if not isinstance(innerT, t.TypeVar):
-            if T is object or ismapping(param, T):
-                kwargs['type'] = json.loads
-                kwargs.setdefault('help', 'type: json')
-            else:
-                kwargs['type'] = innerT
-    else:
-        if T:
-            kwargs['type'] = T
-        elif not (param.default is param.empty or param.default is None):
-            kwargs['type'] = type(param.default)
-
-    if 'help' not in kwargs:
+def typing_type(T):
+    iterable, _ = real_type(T.__origin__)
+    if iterable:
         try:
-            _type = kwargs['type']
-            if isinstance(_type, type):
-                kwargs['help'] = str('type: ' + _type.__name__)
-        except (KeyError, AttributeError):
+            subscript = T.__args__[0]
+            _, constructor = real_type(subscript)
+            return ArgType(True, constructor)
+        except IndexError:
+            return ArgType(True, None)
+
+    return ArgType(False, None)
+
+
+def annotation_type(annotation):
+    if inspect.isfunction(annotation) or inspect.isbuiltin(annotation):
+        return ArgType(False, annotation)
+    if isinstance(annotation, type):
+        return real_type(annotation)
+    return typing_type(annotation)
+
+
+def varargs_type(param):
+    if param.annotation is param.empty:
+        return ArgType(True, None)
+
+    _, constructor = annotation_type(param.annotation)
+    return ArgType(True, constructor)
+
+
+def default_type(default):
+    iterable, constructor = real_type(type(default))
+    if iterable:
+        try:
+            _, constructor = real_type(type(default[0]))
+        except IndexError:
             pass
+    return ArgType(iterable, constructor)
+
+
+def infer_type(param, positional=False):
+    if param.kind is param.VAR_POSITIONAL:
+        return varargs_type(param)
+
+    if param.annotation is not param.empty:
+        return annotation_type(param.annotation)
+
+    if positional:
+        return ArgType(False, None)
+
+    return default_type(param.default)
+
+
+def add_arg(parser, name, param, kwargs, shortflag=None, positional=True):
+    iterable, constructor = infer_type(param, positional)
+    if iterable:
+        kwargs['nargs'] = '*'
+    if constructor:
+        kwargs['type'] = constructor
+        tname = 'json' if constructor == json.loads else constructor.__name__
+        kwargs['help'] = 'type: ' + tname
 
     if param.default is not param.empty:
         defstr = 'default: %s' % getattr(param.default, 'name', param.default)
@@ -106,7 +131,7 @@ def add_arg(parser, name, param, kwargs, shortflag=None):
 
 def mkpositional(params, parser):
     for param in params:
-        add_arg(parser, param.name, param, {})
+        add_arg(parser, param.name, param, {}, positional=True)
 
 
 def mkflags(params, parser):
@@ -135,14 +160,12 @@ def mkoptions(params, parser):
         )
 
 
-def script(func=None, **kwargs):
-    if func is None:
-        return functools.partial(script, **kwargs)
-
+def script(func):
     def run(*args, **kwargs):
         """run as cli script. *args and **kwargs are pased to
         ArgumentParser.parse_args
         """
+        # build the parser from signature
         sig = inspect.signature(func)
         positionals, flags, options = sort_params(sig.parameters.values())
         parser = argparse.ArgumentParser(description=func.__doc__, **kwargs)
@@ -150,8 +173,10 @@ def script(func=None, **kwargs):
         mkflags(flags, parser)
         mkoptions(options, parser)
 
-        args = parser.parse_args(*args, **kwargs)
-        args = vars(args)
+        # parse into a dictionary
+        args = vars(parser.parse_args(*args, **kwargs))
+
+        # map args back onto the signature.
         pargs = []
         for param in positionals:
             if param.kind == param.VAR_POSITIONAL:

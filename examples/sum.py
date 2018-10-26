@@ -4,7 +4,7 @@ import lazycli
 
 @lazycli.script
 def main(numbers: t.List[float]):
-    sum(numbers)
+    return sum(numbers)
 
 if __name__ == '__main__':
     main.run()
