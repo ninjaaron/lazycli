@@ -2,7 +2,7 @@ lazycli
 =======
 lazycli is a module which provides a decorator which will generate cli
 scripts from function signatures. The intention is to allow the creation
-of cli-scripts with as little extra work as possible. It was orinally
+of cli-scripts with as little extra work as possible. It was originally
 going to be called ``sig2cli``, but someone else already `had the same
 idea`_ and got the name on PyPI in ten months before I did.
 
@@ -11,8 +11,8 @@ interfaces with *minimum effort*.
 
 lazycli wraps ``argparse`` from the Python standard library and exposes
 some parts of the `argparse api`_. The abstraction it provides is a
-little leaky, but it's not too bad, because it's relativey simple and is
-not intended to provide the full range functionality. If you need
+little leaky, but it's not too bad, because it's relatively simple and
+is not intended to provide the full range functionality. If you need
 flexibility, use ``argparse`` directly or something more powerful like
 click_.
 
@@ -87,8 +87,9 @@ important thing in this script are these three lines:
 - Short versions of flags are generated automatically from the first
   letter of the parameter.
 - A ``.run`` function is tacked on to the ``cp`` function which
-  triggers argument parsing applies the results to ``cp``. The ``cp``
-  function itself is unaltered and can be called elsewhere if desired.
+  triggers argument parsing and applies the results to ``cp``. The
+  ``cp`` function itself is unaltered and can be called elsewhere if
+  desired.
 
 I'm not entirely sure how useful this last point is, since script
 entry-point functions tend not to be very general-purpose, but, eh, who
@@ -132,7 +133,7 @@ default argument.
   ``object``, the argument should be a json literal (though it could
   theoretically be a string, number, array or object).
 
-The infered type is then used as a constructor to parse the argument
+The inferred type is then used as a constructor to parse the argument
 string. This means only constructors that can take strings as input may
 be used.
 
@@ -227,7 +228,7 @@ special classes for making this less ugly:
 
 
 These classes will provide users more helpful type information and will
-reture true if used in instance checks of text file types (including
+return true if used in instance checks of text file types (including
 ``sys.{stdin,stdout,stderr}`` and non-bytes output of the ``open``
 builtin function). These classes don't create instances of themselves,
 but rather instances of ``io.TextIOWrapper``. However, they still break
@@ -277,9 +278,9 @@ script, modeled on info in this `blog post`_
   if __name__ == '__main__':
       script.run()
 
-Notice that the subparsers have a ``**kwargs`` argument. This is to
-catch any arguments set in the top-level command. The
-implementation of of subcommands is still in development.
+Notice that the subcommands have a ``**kwargs`` argument. This is to
+catch any arguments set in the top-level command. The implementation of
+of subcommands is still in development.
 
 .. code:: shell
 
