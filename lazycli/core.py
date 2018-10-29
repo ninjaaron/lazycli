@@ -6,6 +6,8 @@ import collections
 import json
 import inspect
 import io
+import libaaron
+import functools
 import typing as t
 
 
@@ -52,7 +54,7 @@ def sort_params(params):
     for param in params:
         if param.kind is param.VAR_KEYWORD:
             pass
-        if param.annotation is bool or isinstance(param.default, bool):
+        elif param.annotation is bool or isinstance(param.default, bool):
             flags.append((param, getshortflag(param.name[0], shortflags)))
         elif param.default == param.empty:
             positionals.append(param)
@@ -185,25 +187,47 @@ def mkoptions(params, parser):
         )
 
 
-def script(func):
-    def run(*args, **kwargs):
-        """run as cli script. *args and **kwargs are pased to
-        ArgumentParser.parse_args
+class Script:
+    def __init__(self, function=None, parser=argparse.ArgumentParser):
+        """make a parser for a script.
         """
-        # build the parser from signature
-        sig = inspect.signature(func)
-        positionals, flags, options = sort_params(sig.parameters.values())
-        parser = argparse.ArgumentParser(description=func.__doc__, **kwargs)
-        mkpositional(positionals, parser)
+        self.function = function
+        self.parsertype = parser
+
+    @libaaron.reify
+    def parser(self):
+        if not self.function:
+            return self.parsertype()
+        sig = inspect.signature(self.function)
+        self.positionals, flags, options = sort_params(sig.parameters.values())
+        parser = self.parsertype(description=self.function.__doc__)
+        mkpositional(self.positionals, parser)
         mkflags(flags, parser)
         mkoptions(options, parser)
+        return parser
 
-        # parse into a dictionary
-        args = vars(parser.parse_args(*args, **kwargs))
+    @libaaron.reify
+    def subparsers(self):
+        return self.parser.add_subparsers()
+
+    def run(self, *args, **kwargs):
+        args = vars(self.parser.parse_args(*args, **kwargs))
+        try:
+            out = args.pop('func')(args)
+        except KeyError:
+            out = self._func(args)
+
+        if isinstance(out, t.Iterable) and not isinstance(
+                out, (str, t.Mapping)):
+            print(*out, sep='\n')
+        elif out is not None:
+            print(out)
+
+    def _func(self, args):
 
         # map args back onto the signature.
         pargs = []
-        for param in positionals:
+        for param in self.positionals:
             if param.kind == param.VAR_POSITIONAL:
                 pargs.extend(args.pop(param.name))
             elif param.kind == param.POSITIONAL_OR_KEYWORD:
@@ -214,12 +238,20 @@ def script(func):
                 args[key[3:]] = args.pop(key)
                 continue
 
-        out = func(*pargs, **args)
-        if isinstance(out, t.Iterable) and not isinstance(
-                out, (str, t.Mapping)):
-            print(*out, sep='\n')
-        elif out is not None:
-            print(out)
+        return self.function(*pargs, **args)
 
-    func.run = run
-    return func
+    def subcommand(self, func):
+        subparser = functools.partial(
+            self.subparsers.add_parser, func.__name__)
+        subscript = Script(func, subparser)
+        subscript.parser.set_defaults(func=subscript._func)
+        return func
+
+
+def script(func=None):
+    scrpt = Script(func)
+    if func:
+        func.run = scrpt.run
+        func.subcommand = scrpt.subcommand
+        return func
+    return scrpt

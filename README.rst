@@ -95,9 +95,7 @@ entry-point functions tend not to be very general-purpose, but, eh, who
 knows.
 
 Be aware that, presently, ``**kwargs``-style parameters are ignored
-altogether by lazycli. This may change in the future if I decide to
-work on sub-parsers. Honestly, the point of this module is to avoid
-typing, and doing sub-parsers sounds like a lot of typing.
+by lazycli, but you may need to use them with subcommands.
 
 **Note on short flags:**
   Short flags are generated for optional arguments based on the first
@@ -243,3 +241,70 @@ Output
 So far, output has simply been printed. However, If the function has a
 return value, that will also be printed. If it is an iterable (besides a
 string or mapping), each item will be printed on a new line.
+
+Subcommands
+-----------
+I'll expand this section of the documentation later, but here's a sample
+script, modeled on info in this `blog post`_
+
+.. code:: Python
+
+  #!/usr/bin/env python3
+  import lazycli
+
+
+  @lazycli.script
+  def script(version=False):
+      return 1.0
+
+
+  @script.subcommand
+  def hello(name, greeting="Hello", caps=False, **kwargs):
+      return greet(name, greeting, caps)
+
+
+  @script.subcommand
+  def goodbye(name, greeting="Goodbye", caps=False, **kwargs):
+      return greet(name, greeting, caps)
+
+
+  def greet(name, greeting, caps):
+      if caps:
+          return f'{greeting}, {name}!'.upper()
+      return f'{greeting}, {name}!'
+
+
+  if __name__ == '__main__':
+      script.run()
+
+Notice that the subparsers have a ``**kwargs`` argument. This is to
+catch any arguments set in the top-level command. The
+implementation of of subcommands is still in development.
+
+.. code:: shell
+
+  $ ./test_sub.py -h
+  usage: test_sub.py [-h] [-v] {hello,goodbye} ...
+
+  positional arguments:
+    {hello,goodbye}
+
+  optional arguments:
+    -h, --help       show this help message and exit
+    -v, --version
+  $
+  $
+  $ ./test_sub.py hello -h
+  usage: test_sub.py hello [-h] [-c] [-g GREETING] name
+
+  positional arguments:
+    name
+
+  optional arguments:
+    -h, --help            show this help message and exit
+    -c, --caps
+    -g GREETING, --greeting GREETING
+                          default: Hello
+
+.. _blog post:
+  https://realpython.com/comparing-python-command-line-parsing-libraries-argparse-docopt-click/
