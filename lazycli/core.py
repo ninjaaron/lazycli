@@ -9,7 +9,7 @@ import io
 import typing as t
 
 
-class IOMeta(type):
+class FileMeta(type):
     def __subclasscheck__(self, subclass):
         return issubclass(subclass, io.TextIOBase)
 
@@ -17,20 +17,20 @@ class IOMeta(type):
         return isinstance(instance, io.TextIOBase)
 
 
-class IOBase(metaclass=IOMeta):
+class FileBase(metaclass=FileMeta):
     def __new__(cls, filename):
         return open(filename, cls.mode)
 
 
-class ReadFile(IOBase):
+class ReadFile(FileBase):
     mode = 'r'
 
 
-class WriteFile(IOBase):
+class WriteFile(FileBase):
     mode = 'w'
 
 
-class AppendFile(IOBase):
+class AppendFile(FileBase):
     mode = 'a'
 
 
