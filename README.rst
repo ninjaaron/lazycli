@@ -134,8 +134,9 @@ default argument.
   ``object``, the argument should be a json literal (though it could
   theoretically be a string, number, array or object).
 
-The infered type is then used as a factory function to parse the
-argument string.
+The infered type is then used as a constructor to parse the argument
+string. This means only constructors that can take strings as input may
+be used.
 
 .. code:: python
 
