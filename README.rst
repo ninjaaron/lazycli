@@ -140,17 +140,20 @@ argument string.
 .. code:: python
 
   #!/usr/bin/env python3
+  import typing as t
   import lazycli
 
   @lazycli.script
-  def my_sum(*numbers: float):
-      print(sum(numbers))
+  def mysum(numbers: t.List[float]):
+      return sum(numbers)
 
   if __name__ == '__main__':
-      my_sum.run()
+      mysum.run()
+
 
 .. code:: sh
 
+  $ ./sum.py -h
   usage: sum.py [-h] [numbers [numbers ...]]
 
   positional arguments:
@@ -158,6 +161,9 @@ argument string.
 
   optional arguments:
     -h, --help  show this help message and exit
+
+  $ ./sum.py 5 8
+  13
 
 Though the style is questionable, this means you can use arbitrary
 callables as type annotations:
@@ -183,10 +189,6 @@ callables as type annotations:
   if __name__ == '__main__':
       upcat.run()
 
-This looks pretty bad, and mypy_ is going to hate it. A better way to
-do this is probably just parsing the string inside the script. P.S. Here
-is the interface generated:
-
 .. code:: sh
 
   usage: upcat.py [-h] [-i INFILE] [-o OUTFILE]
@@ -196,9 +198,41 @@ is the interface generated:
   optional arguments:
     -h, --help            show this help message and exit
     -i INFILE, --infile INFILE
-                          default: <stdin>
+                          type: open; default: <stdin>
     -o OUTFILE, --outfile OUTFILE
-                          default: <stdout>
+                          type: <lambda>; default: <stdout>
+
+This looks pretty bad, and mypy_ is going to hate it. A better way to
+do this is probably just parsing the string inside the script.
+
+However, because the pattern of having an optional file argument and
+falling back to standard streams is so common, ``lazycli`` provides
+special classes for making this less ugly:
+
+.. code:: Python
+
+  #!/usr/bin/env python3
+  import sys
+  from lazycli import script, ReadFile, WriteFile
+
+
+  @script
+  def upcat2(infile:ReadFile=sys.stdin, outfile:WriteFile=sys.stdout):
+      """cat, but upper-cases everything."""
+      for line in infile:
+          outfile.write(line.upper())
+
+
+  if __name__ == '__main__':
+      upcat2.run()
+
+
+These classes will provide users more helpful type information and will
+reture true if used in instance checks of text file types (including
+``sys.{stdin,stdout,stderr}`` and non-bytes output of the ``open``
+builtin function). These classes don't create instances of themselves,
+but rather instances of ``io.TextIOWrapper``. However, they still break
+mypy. Funny how metaclasses will do that.
 
 .. _typing: https://docs.python.org/3/library/typing.html
 .. _mypy: http://mypy-lang.org/
