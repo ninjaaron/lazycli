@@ -163,7 +163,7 @@ argument string.
     -h, --help  show this help message and exit
 
   $ ./sum.py 5 8
-  13
+  13.0
 
 Though the style is questionable, this means you can use arbitrary
 callables as type annotations:
