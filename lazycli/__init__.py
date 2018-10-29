@@ -1,1 +1,1 @@
-from .core import script
+from .core import script, ReadFile, WriteFile, AppendFile 

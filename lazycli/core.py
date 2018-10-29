@@ -6,9 +6,23 @@ import collections
 import json
 import inspect
 import io
-import string
+import os
 import typing as t
-alpha = set(string.ascii_letters)
+
+
+class ReadFile(io.TextIOWrapper):
+    def __init__(self, filename):
+        super().__init__(open(filename, 'rb'))
+
+
+class WriteFile(io.TextIOWrapper):
+    def __init__(self, filename):
+        super().__init__(open(filename, 'wb'))
+
+
+class AppendFile(io.TextIOWrapper):
+    def __init__(self, filename):
+        super().__init__(open(filename, 'ab'))
 
 
 def getshortflag(char, shortflags):
