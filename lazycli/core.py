@@ -6,23 +6,32 @@ import collections
 import json
 import inspect
 import io
-import os
 import typing as t
 
 
-class ReadFile(io.TextIOWrapper):
-    def __init__(self, filename):
-        super().__init__(open(filename, 'rb'))
+class IOMeta(type):
+    def __subclasscheck__(self, subclass):
+        return issubclass(subclass, io.TextIOBase)
+
+    def __instancecheck__(self, instance):
+        return isinstance(instance, io.TextIOBase)
 
 
-class WriteFile(io.TextIOWrapper):
-    def __init__(self, filename):
-        super().__init__(open(filename, 'wb'))
+class IOBase(metaclass=IOMeta):
+    def __new__(cls, filename):
+        return open(filename, cls.mode)
 
 
-class AppendFile(io.TextIOWrapper):
-    def __init__(self, filename):
-        super().__init__(open(filename, 'ab'))
+class ReadFile(IOBase):
+    mode = 'r'
+
+
+class WriteFile(IOBase):
+    mode = 'w'
+
+
+class AppendFile(IOBase):
+    mode = 'a'
 
 
 def getshortflag(char, shortflags):
@@ -99,6 +108,8 @@ def varargs_type(param):
 
 
 def default_type(default):
+    if default is None:
+        return ArgType(False, None)
     iterable, constructor = real_type(type(default))
     if iterable:
         try:
