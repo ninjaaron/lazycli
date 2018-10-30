@@ -12,4 +12,5 @@ setup(name=package,
       long_description_content_type='text/x-rst',
       url='https://github.com/ninjaaron/lazycli',
       packages=['lazycli'],
+      install_requires=['libaaron'],
       python_requires='>=3.5')
