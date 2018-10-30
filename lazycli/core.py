@@ -199,12 +199,19 @@ class Script:
         if not self.function:
             return self.parsertype()
         sig = inspect.signature(self.function)
-        self.positionals, flags, options = sort_params(sig.parameters.values())
+        self.positionals, self.flags, self.options = sort_params(
+            sig.parameters.values())
         parser = self.parsertype(description=self.function.__doc__)
         mkpositional(self.positionals, parser)
-        mkflags(flags, parser)
-        mkoptions(options, parser)
+        mkflags(self.flags, parser)
+        mkoptions(self.options, parser)
         return parser
+
+    @property
+    def params(self):
+        yield from self.positionals
+        yield from (i[0] for i in self.flags)
+        yield from (i[0] for i in self.options)
 
     @libaaron.reify
     def subparsers(self):
@@ -212,16 +219,24 @@ class Script:
 
     def run(self, *args, **kwargs):
         args = vars(self.parser.parse_args(*args, **kwargs))
-        try:
-            out = args.pop('func')(args)
-        except KeyError:
-            out = self._func(args)
+        delegate = args.pop('_func', None)
+        if delegate:
+            top_args = {p.name: args.pop(p.name) for p in self.params}
+        else:
+            top_args = args
+        funcs = [(self._func, top_args)] if self.function else []
 
-        if isinstance(out, t.Iterable) and not isinstance(
-                out, (str, t.Mapping)):
-            print(*out, sep='\n')
-        elif out is not None:
-            print(out)
+        if delegate:
+            funcs.append((delegate, args))
+
+        for func, args in funcs:
+            out = func(args)
+
+            if isinstance(out, t.Iterable) and not isinstance(
+                    out, (str, t.Mapping)):
+                print(*out, sep='\n')
+            elif out is not None:
+                print(out)
 
     def _func(self, args):
 
@@ -244,7 +259,7 @@ class Script:
         subparser = functools.partial(
             self.subparsers.add_parser, func.__name__)
         subscript = Script(func, subparser)
-        subscript.parser.set_defaults(func=subscript._func)
+        subscript.parser.set_defaults(_func=subscript._func)
         return func
 
 

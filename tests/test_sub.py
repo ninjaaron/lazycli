@@ -4,16 +4,17 @@ import lazycli
 
 @lazycli.script
 def script(version=False):
-    return 1.0
+    if version:
+        return 1.0
 
 
 @script.subcommand
-def hello(name, greeting="Hello", caps=False, **kwargs):
+def hello(name, greeting="Hello", caps=False):
     return greet(name, greeting, caps)
 
 
 @script.subcommand
-def goodbye(name, greeting="Goodbye", caps=False, **kwargs):
+def goodbye(name, greeting="Goodbye", caps=False):
     return greet(name, greeting, caps)
 
 

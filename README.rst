@@ -95,7 +95,7 @@ entry-point functions tend not to be very general-purpose, but, eh, who
 knows.
 
 Be aware that, presently, ``**kwargs``-style parameters are ignored
-by lazycli, but you may need to use them with subcommands.
+by lazycli.
 
 **Note on short flags:**
   Short flags are generated for optional arguments based on the first
@@ -259,12 +259,12 @@ script, modeled on info in this `blog post`_
 
 
   @script.subcommand
-  def hello(name, greeting="Hello", caps=False, **kwargs):
+  def hello(name, greeting="Hello", caps=False):
       return greet(name, greeting, caps)
 
 
   @script.subcommand
-  def goodbye(name, greeting="Goodbye", caps=False, **kwargs):
+  def goodbye(name, greeting="Goodbye", caps=False):
       return greet(name, greeting, caps)
 
 
