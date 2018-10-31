@@ -144,7 +144,7 @@ be used.
   import lazycli
 
   @lazycli.script
-  def mysum(numbers: t.List[float]):
+  def mysum(numbers: t.Iterable[float]):
       return sum(numbers)
 
   if __name__ == '__main__':
@@ -234,6 +234,9 @@ builtin function). These classes don't create instances of themselves,
 but rather instances of ``io.TextIOWrapper``. However, they still break
 mypy. Funny how metaclasses will do that.
 
+In addition to ReadFile and WriteFile, there is also an AppendFile
+constructor.
+
 .. _typing: https://docs.python.org/3/library/typing.html
 .. _mypy: http://mypy-lang.org/
 
@@ -255,16 +258,17 @@ script, modeled on info in this `blog post`_
 
 
   @lazycli.script
-  def script(version=False):
+  def main(version=False):
+    if version:
       return 1.0
 
 
-  @script.subcommand
+  @main.subcommand
   def hello(name, greeting="Hello", caps=False):
       return greet(name, greeting, caps)
 
 
-  @script.subcommand
+  @main.subcommand
   def goodbye(name, greeting="Goodbye", caps=False):
       return greet(name, greeting, caps)
 
@@ -278,9 +282,12 @@ script, modeled on info in this `blog post`_
   if __name__ == '__main__':
       script.run()
 
-Notice that the subcommands have a ``**kwargs`` argument. This is to
-catch any arguments set in the top-level command. The implementation of
-of subcommands is still in development.
+
+Any parameters definied on the script function (main, in this case)
+will be passed to the script function, and parameters definied on the
+subcommands are parsed to them. If one wishes to pass values from the
+top-level function to subcommands, and external mechanism must be used.
+(e.g. a global variable)
 
 .. code:: shell
 

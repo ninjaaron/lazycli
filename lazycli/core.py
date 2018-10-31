@@ -239,7 +239,6 @@ class Script:
                 print(out)
 
     def _func(self, args):
-
         # map args back onto the signature.
         pargs = []
         for param in self.positionals:
