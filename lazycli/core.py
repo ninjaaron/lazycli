@@ -8,7 +8,7 @@ import inspect
 import io
 import libaaron
 import functools
-import typing as t
+from typing import Sequence, Mapping, Iterable
 
 
 class FileMeta(type):
@@ -68,13 +68,13 @@ ArgType = collections.namedtuple('ArgType', 'iterable, constructor')
 
 
 def real_type(T):
-    if T is object or issubclass(T, t.Mapping):
+    if T is object or issubclass(T, Mapping):
         return ArgType(False, json.loads)
 
     if issubclass(T, (io.IOBase, str)):
         return ArgType(False, T)
 
-    if issubclass(T, t.Sequence):
+    if issubclass(T, Sequence):
         return ArgType(True, None)
 
     return ArgType(False, T)
@@ -218,7 +218,10 @@ class Script:
         return self.parser.add_subparsers()
 
     def run(self, *args, **kwargs):
-        args = vars(self.parser.parse_args(*args, **kwargs))
+        args = {
+            k.replace('-', '_'): v for k, v in
+            vars(self.parser.parse_args(*args, **kwargs)).items()
+        }
         delegate = args.pop('_func', None)
         if delegate:
             top_args = {p.name: args.pop(p.name) for p in self.params}
@@ -232,8 +235,8 @@ class Script:
         for func, args in funcs:
             out = func(args)
 
-            if isinstance(out, t.Iterable) and not isinstance(
-                    out, (str, t.Mapping)):
+            if isinstance(out, Iterable) and not isinstance(
+                    out, (str, Mapping)):
                 print(*out, sep='\n')
             elif out is not None:
                 print(out)
@@ -267,5 +270,6 @@ def script(func=None):
     if func:
         func.run = scrpt.run
         func.subcommand = scrpt.subcommand
+        func._script = scrpt
         return func
     return scrpt
