@@ -2,16 +2,25 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 import argparse
-import collections
 import json
 import inspect
 import io
 import libaaron
 import functools
-from typing import Sequence, Mapping, Iterable
+import typing as t
 
 
+# fake types
+Iter = t.Iterable
+PositionalParams = Iter[inspect.Parameter]
+FlagsParams = Iter[t.Tuple[inspect.Parameter, t.Optional[str]]]
+OptionParams = FlagsParams
+Parser = argparse.ArgumentParser
+
+
+# constructors for files
 class FileMeta(type):
+    """metaclass passes runtime typechecks on io.TextIOBase"""
     def __subclasscheck__(self, subclass):
         return issubclass(subclass, io.TextIOBase)
 
@@ -20,23 +29,46 @@ class FileMeta(type):
 
 
 class FileBase(metaclass=FileMeta):
-    def __new__(cls, filename):
+    """Children of this class really just pass the arguments from their
+    constructor to `open`. There are no real instances of the the classes.
+    the mode argument is determined in the child.
+    """
+    mode = ''
+
+    def __new__(cls, filename: str):
         return open(filename, cls.mode)
 
 
 class ReadFile(FileBase):
+    """opens a file in text mode for reading"""
     mode = 'r'
 
 
 class WriteFile(FileBase):
+    """opens a file in text mode for writing (truncates)"""
     mode = 'w'
 
 
 class AppendFile(FileBase):
+    """opens a file in text mode for writing (appends)"""
     mode = 'a'
 
 
-def getshortflag(char, shortflags):
+def getshortflag(char: str, shortflags: t.Set[str]) -> t.Optional[str]:
+    """Check if a character has alread used as a short flag. If so, uppercase
+    it, otherwise return the character. If the uppercase character is also
+    used, return None. No shortflag is generated.
+
+    char -- the character to use
+
+    shortflags -- a set of flags already used. This function updates the set,
+                  so usage should be like this:
+
+    >>> used = set()
+    >>> for char in 'abccdce':
+    ...     flag = getshortflag(char, used)
+    ...     # etc
+    """
     if char in shortflags:
         char = char.upper()
         if char in shortflags:
@@ -46,11 +78,12 @@ def getshortflag(char, shortflags):
     return char
 
 
-def sort_params(params):
+def sort_params(params: Iter[inspect.Parameter]) -> (
+        t.Tuple[PositionalParams, FlagsParams, OptionParams]):
     positionals = []
     flags = []
     options = []
-    shortflags = set()
+    shortflags: t.Set[str] = set()
     for param in params:
         if param.kind is param.VAR_KEYWORD:
             pass
@@ -64,23 +97,27 @@ def sort_params(params):
     return positionals, flags, options
 
 
-ArgType = collections.namedtuple('ArgType', 'iterable, constructor')
+class ArgType(t.NamedTuple):
+    iterable: bool
+    constructor: t.Optional[t.Callable[[str], t.Any]]
 
 
-def real_type(T):
-    if T is object or issubclass(T, Mapping):
+def real_type(T: t.Type) -> ArgType:
+    """determine argument type from a concrete python type"""
+    if T is object or issubclass(T, t.Mapping):
         return ArgType(False, json.loads)
 
     if issubclass(T, (io.IOBase, str)):
         return ArgType(False, T)
 
-    if issubclass(T, Sequence):
+    if issubclass(T, t.Sequence):
         return ArgType(True, None)
 
     return ArgType(False, T)
 
 
-def typing_type(T):
+def typing_type(T: t.Type) -> ArgType:
+    """determine argument type from a type that is from the `typing` modlue"""
     iterable, _ = real_type(T.__origin__)
     if iterable:
         try:
@@ -93,7 +130,8 @@ def typing_type(T):
     return ArgType(False, None)
 
 
-def annotation_type(annotation):
+def annotation_type(annotation: t.Type) -> ArgType:
+    """determine argument type from type in annotation"""
     if inspect.isfunction(annotation) or inspect.isbuiltin(annotation):
         return ArgType(False, annotation)
     if isinstance(annotation, type):
@@ -101,7 +139,8 @@ def annotation_type(annotation):
     return typing_type(annotation)
 
 
-def varargs_type(param):
+def varargs_type(param: inspect.Parameter) -> ArgType:
+    """determine argument type for variadic positional parameter"""
     if param.annotation is param.empty:
         return ArgType(True, None)
 
@@ -109,7 +148,8 @@ def varargs_type(param):
     return ArgType(True, constructor)
 
 
-def default_type(default):
+def default_type(default) -> ArgType:
+    """infer the type from the default argument"""
     if default is None:
         return ArgType(False, None)
     iterable, constructor = real_type(type(default))
@@ -121,7 +161,8 @@ def default_type(default):
     return ArgType(iterable, constructor)
 
 
-def infer_type(param, positional=False):
+def infer_type(param: inspect.Parameter, positional: bool = False) -> ArgType:
+    """determine argument type from a function parameter"""
     if param.kind is param.VAR_POSITIONAL:
         return varargs_type(param)
 
@@ -134,7 +175,18 @@ def infer_type(param, positional=False):
     return default_type(param.default)
 
 
-def add_arg(parser, name, param, kwargs, shortflag=None, positional=True):
+def add_arg(
+        parser: Parser,
+        name: str,
+        param: inspect.Parameter,
+        kwargs,
+        shortflag: str = None,
+        positional: bool = False
+):
+    """add an argument to the parser with the given name. additional info is
+    derived from the function parameter. kwargs is a dictionary of keyword
+    arguments that will be passed to add_arg. This dictionary will be mutated.
+    """
     iterable, constructor = infer_type(param, positional)
     if iterable:
         kwargs['nargs'] = '*'
@@ -156,12 +208,14 @@ def add_arg(parser, name, param, kwargs, shortflag=None, positional=True):
         parser.add_argument(name.replace('_', '-'), **kwargs)
 
 
-def mkpositional(params, parser):
+def mkpositional(params: PositionalParams, parser: Parser):
+    """add positional parameters to the parser"""
     for param in params:
         add_arg(parser, param.name, param, {}, positional=True)
 
 
-def mkflags(params, parser):
+def mkflags(params: FlagsParams, parser: Parser):
+    """add flags to the parser"""
     for param, shortflag in params:
         kwargs = {'action': 'store_true'}
         name = '--'
@@ -170,13 +224,15 @@ def mkflags(params, parser):
             kwargs['action'] = 'store_false'
         name += param.name
         if shortflag:
-            parser.add_argument(
+            parser.add_argument(  # type: ignore
                 '-' + shortflag, name.replace('_', '-'), **kwargs)
         else:
-            parser.add_argument(name.replace('_', '-'), **kwargs)
+            parser.add_argument(  # type: ignore
+                name.replace('_', '-'), **kwargs)
 
 
-def mkoptions(params, parser):
+def mkoptions(params: OptionParams, parser: Parser):
+    """add optional params to the parser"""
     for param, shortflag in params:
         add_arg(
             parser,
@@ -188,14 +244,15 @@ def mkoptions(params, parser):
 
 
 class Script:
-    def __init__(self, function=None, parser=argparse.ArgumentParser):
+    def __init__(self, function: t.Callable = None, parser=Parser):
         """make a parser for a script.
         """
         self.function = function
         self.parsertype = parser
 
     @libaaron.reify
-    def parser(self):
+    def parser(self) -> Parser:
+        """returns the argparse.ArgumentParser for the instance"""
         if not self.function:
             return self.parsertype()
         sig = inspect.signature(self.function)
@@ -208,16 +265,21 @@ class Script:
         return parser
 
     @property
-    def params(self):
+    def params(self) -> t.Iterator[inspect.Parameter]:
+        """iterate over all parameters"""
         yield from self.positionals
         yield from (i[0] for i in self.flags)
         yield from (i[0] for i in self.options)
 
     @libaaron.reify
-    def subparsers(self):
+    def subparsers(self) -> Parser:
+        """get a subparser for the instance"""
         return self.parser.add_subparsers()
 
     def run(self, *args, **kwargs):
+        """run the generated cli script. *args and **kwargs are passed to
+        argparse.ArgumentParser.parse_args
+        """
         args = {
             k.replace('-', '_'): v for k, v in
             vars(self.parser.parse_args(*args, **kwargs)).items()
@@ -235,15 +297,15 @@ class Script:
         for func, args in funcs:
             out = func(args)
 
-            if isinstance(out, Iterable) and not isinstance(
-                    out, (str, Mapping)):
+            if isinstance(out, Iter) and not isinstance(
+                    out, (str, t.Mapping)):
                 print(*out, sep='\n')
             elif out is not None:
                 print(out)
 
-    def _func(self, args):
+    def _func(self, args: t.MutableMapping):
         # map args back onto the signature.
-        pargs = []
+        pargs = []  # type: t.List[t.Any]
         for param in self.positionals:
             if param.kind == param.VAR_POSITIONAL:
                 pargs.extend(args.pop(param.name))
@@ -255,9 +317,9 @@ class Script:
                 args[key[3:]] = args.pop(key)
                 continue
 
-        return self.function(*pargs, **args)
+        return (self.function or (lambda: None))(*pargs, **args)
 
-    def subcommand(self, func):
+    def subcommand(self, func: t.Callable) -> t.Callable:
         subparser = functools.partial(
             self.subparsers.add_parser, func.__name__)
         subscript = Script(func, subparser)
