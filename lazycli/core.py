@@ -249,6 +249,9 @@ class Script:
         """
         self.function = function
         self.parsertype = parser
+        self.positionals = []
+        self.flags = []
+        self.options = []
 
     @libaaron.reify
     def parser(self) -> Parser:
