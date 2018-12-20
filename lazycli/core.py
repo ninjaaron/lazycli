@@ -279,7 +279,7 @@ class Script:
         """get a subparser for the instance"""
         return self.parser.add_subparsers()
 
-    def run(self, *args, iterprint=False **kwargs):
+    def run(self, *args, iterprint=False, **kwargs):
         """run the generated cli script. *args and **kwargs are passed to
         argparse.ArgumentParser.parse_args
         """
@@ -305,8 +305,8 @@ class Script:
                 if iterprint:
                     for line in out:
                         print(line)
-                    else:
-                        print(*out, sep='\n')
+                else:
+                    print(*out, sep='\n')
             elif out is not None:
                 print(out)
 
