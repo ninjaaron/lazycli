@@ -1,7 +1,7 @@
 from setuptools import setup
 
 package = 'lazycli'
-version = '0.2.5'
+version = '0.6.0'
 with open('README.rst') as fh:
     long_description = fh.read()
 
