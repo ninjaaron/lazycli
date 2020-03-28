@@ -2,7 +2,7 @@
 import typing as t
 import lazycli
 
-@lazycli.script
+@lazycli.script(help={'numbers': "all the numbers you want to sum"})
 def mysum(numbers: t.List[float]):
     return sum(numbers)
 

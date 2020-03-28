@@ -16,19 +16,10 @@ PositionalParams = Iter[inspect.Parameter]
 FlagsParams = Iter[t.Tuple[inspect.Parameter, t.Optional[str]]]
 OptionParams = FlagsParams
 Parser = argparse.ArgumentParser
+HelpDict = t.Dict[str, str]
 
 
-# constructors for files
-class FileMeta(type):
-    """metaclass passes runtime typechecks on io.TextIOBase"""
-    def __subclasscheck__(self, subclass):
-        return issubclass(subclass, io.TextIOBase)
-
-    def __instancecheck__(self, instance):
-        return isinstance(instance, io.TextIOBase)
-
-
-class FileBase(metaclass=FileMeta):
+class FileBase(io.TextIOBase):
     """Children of this class really just pass the arguments from their
     constructor to `open`. There are no real instances of the the classes.
     the mode argument is determined in the child.
@@ -134,9 +125,11 @@ def annotation_type(annotation: t.Type) -> ArgType:
     """determine argument type from type in annotation"""
     if inspect.isfunction(annotation) or inspect.isbuiltin(annotation):
         return ArgType(False, annotation)
-    if isinstance(annotation, type):
+    if isinstance(annotation, t.GenericMeta):
+        return typing_type(annotation)
+    if isinstance(annotation, t.Type):
         return real_type(annotation)
-    return typing_type(annotation)
+    return ArgType(False, None)
 
 
 def varargs_type(param: inspect.Parameter) -> ArgType:
@@ -180,6 +173,7 @@ def add_arg(
         name: str,
         param: inspect.Parameter,
         kwargs,
+        help: HelpDict,
         shortflag: str = None,
         positional: bool = False
 ):
@@ -187,13 +181,22 @@ def add_arg(
     derived from the function parameter. kwargs is a dictionary of keyword
     arguments that will be passed to add_arg. This dictionary will be mutated.
     """
+    try:
+        kwargs["help"] = help[name]
+    except KeyError:
+        pass
+
     iterable, constructor = infer_type(param, positional)
     if iterable:
         kwargs['nargs'] = '*'
     if constructor:
         kwargs['type'] = constructor
         tname = 'json' if constructor == json.loads else constructor.__name__
-        kwargs['help'] = 'type: ' + tname
+        tstring = 'type: ' + tname
+        try:
+            kwargs['help'] += '; ' + tstring
+        except KeyError:
+            kwargs['help'] = tstring
 
     if param.default is not param.empty:
         defstr = 'default: %s' % getattr(param.default, 'name', param.default)
@@ -208,13 +211,13 @@ def add_arg(
         parser.add_argument(name.replace('_', '-'), **kwargs)
 
 
-def mkpositional(params: PositionalParams, parser: Parser):
+def mkpositional(params: PositionalParams, parser: Parser, help: HelpDict):
     """add positional parameters to the parser"""
     for param in params:
-        add_arg(parser, param.name, param, {}, positional=True)
+        add_arg(parser, param.name, param, {}, help, positional=True)
 
 
-def mkflags(params: FlagsParams, parser: Parser):
+def mkflags(params: FlagsParams, parser: Parser, help: HelpDict):
     """add flags to the parser"""
     for param, shortflag in params:
         kwargs = {'action': 'store_true'}
@@ -223,6 +226,10 @@ def mkflags(params: FlagsParams, parser: Parser):
             name += 'no-'
             kwargs['action'] = 'store_false'
         name += param.name
+        try:
+            kwargs['help'] = help[name]
+        except KeyError:
+            pass
         if shortflag:
             parser.add_argument(  # type: ignore
                 '-' + shortflag, name.replace('_', '-'), **kwargs)
@@ -231,7 +238,7 @@ def mkflags(params: FlagsParams, parser: Parser):
                 name.replace('_', '-'), **kwargs)
 
 
-def mkoptions(params: OptionParams, parser: Parser):
+def mkoptions(params: OptionParams, parser: Parser, help: HelpDict):
     """add optional params to the parser"""
     for param, shortflag in params:
         add_arg(
@@ -239,16 +246,23 @@ def mkoptions(params: OptionParams, parser: Parser):
             '--' + param.name,
             param,
             {'default': param.default},
-            shortflag
+            help,
+            shortflag,
         )
 
 
 class Script:
-    def __init__(self, function: t.Callable = None, parser=Parser):
+    def __init__(
+            self,
+            function: t.Callable = None,
+            parser: type = Parser,
+            help: HelpDict = None,
+    ):
         """make a parser for a script.
         """
         self.function = function
         self.parsertype = parser
+        self.help = help or {}
         self.positionals = []
         self.flags = []
         self.options = []
@@ -262,9 +276,9 @@ class Script:
         self.positionals, self.flags, self.options = sort_params(
             sig.parameters.values())
         parser = self.parsertype(description=self.function.__doc__)
-        mkpositional(self.positionals, parser)
-        mkflags(self.flags, parser)
-        mkoptions(self.options, parser)
+        mkpositional(self.positionals, parser, self.help)
+        mkflags(self.flags, parser, self.help)
+        mkoptions(self.options, parser, self.help)
         return parser
 
     @property
@@ -300,8 +314,7 @@ class Script:
         for func, args in funcs:
             out = func(args)
 
-            if isinstance(out, Iter) and not isinstance(
-                    out, (str, t.Mapping)):
+            if isinstance(out, Iter) and not isinstance(out, (str, t.Mapping)):
                 if iterprint:
                     for line in out:
                         print(line)
@@ -326,19 +339,26 @@ class Script:
 
         return (self.function or (lambda: None))(*pargs, **args)
 
-    def subcommand(self, func: t.Callable) -> t.Callable:
+    def subcommand(
+            self, func: t.Callable = None, help: HelpDict = None
+    ) -> t.Callable:
+        if not func:
+            return functools.partial(self.subcommand, help=help)
+
         subparser = functools.partial(
-            self.subparsers.add_parser, func.__name__)
+            self.subparsers.add_parser, func.__name__
+        )
         subscript = Script(func, subparser)
         subscript.parser.set_defaults(_func=subscript._func)
         return func
 
 
-def script(func=None):
-    scrpt = Script(func)
-    if func:
-        func.run = scrpt.run
-        func.subcommand = scrpt.subcommand
-        func._script = scrpt
-        return func
-    return scrpt
+def script(func: t.Callable = None, help: HelpDict = None):
+    if not func:
+        return functools.partial(script, help=help)
+
+    scrpt = Script(func, help=help)
+    func.run = scrpt.run
+    func.subcommand = scrpt.subcommand
+    func._script = scrpt
+    return func
