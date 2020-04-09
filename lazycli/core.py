@@ -348,16 +348,20 @@ class Script:
         subparser = functools.partial(
             self.subparsers.add_parser, func.__name__
         )
-        subscript = Script(func, subparser)
+        subscript = Script(func, subparser, help=help)
         subscript.parser.set_defaults(_func=subscript._func)
         return func
 
 
 def script(func: t.Callable = None, help: HelpDict = None):
     if not func:
-        return functools.partial(script, help=help)
+        if help:
+            return functools.partial(script, help=help)
+        else:
+            return Script()
 
     scrpt = Script(func, help=help)
+    print(scrpt)
     func.run = scrpt.run
     func.subcommand = scrpt.subcommand
     func._script = scrpt
