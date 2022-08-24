@@ -125,7 +125,7 @@ def annotation_type(annotation: t.Type) -> ArgType:
     """determine argument type from type in annotation"""
     if inspect.isfunction(annotation) or inspect.isbuiltin(annotation):
         return ArgType(False, annotation)
-    if isinstance(annotation, t.GenericMeta):
+    if isinstance(annotation, t._GenericAlias):
         return typing_type(annotation)
     if isinstance(annotation, t.Type):
         return real_type(annotation)
